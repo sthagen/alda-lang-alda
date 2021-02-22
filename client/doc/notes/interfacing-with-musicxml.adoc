@@ -11,7 +11,7 @@ Definition (XSD).
 * One goal of Alda is to be interoperable with popular formats like MusicXML, so
 we require a way for our Go client to interface with (parse and write) MusicXML.
 
-== Exploration: attempting to model MusicXML in Go
+== Attempting to model MusicXML in Go
 
 * The ideal scenario, when interfacing with a MusicXML file, is to be able to
 unmarshal the file into a group of Go structs.
@@ -85,12 +85,26 @@ importer, they interface directly with an XML parser, and never actually model
 the file completely.
 
 * It appears that from this exploration, the correct way to interface with
-MusicXML is directly in an Alda importer or exporter.
+MusicXML is without a strict Go model.
 
-== MusicXML Importer
+== Finding an XML decoder
 
-* WIP
+* Parsing a MusicXML file into a series of Go structs is the most high-level way
+to interface with MusicXML. We showed above, however, that it is not ideal.
 
-== MusicXML Exporter
+* On the opposite end of the spectrum, we can use Go's built-in `xml.Decoder`,
+which lets us read tokens from an XML file. Unfortunately, using `xml.Decoder`
+directly is a hassle, as it requires manual parsing of `xml.StartElement` and
+`xml.EndElement` tags.
 
-* WIP
+* A happy middle ground is to use a library that can convert an XML file into a
+representation that falls between raw tokens and full-blown structs.
+
+* After a bit of searching, I found a library called
+https://github.com/clbanning/mxj[mxj], which can parse an XML file into an
+ordered `map[string]interface{}`.
+
+** Furthermore, the library supports writing such a map back into XML.
+
+* Then using mxj will help lift our Alda importer and exporter away from the XML
+file itself, simplifying the process.

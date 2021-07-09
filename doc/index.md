@@ -1,27 +1,29 @@
 # Alda: The Docs™
 
-Hello! I'm an introductory paragraph, and this is the landing page for Alda's official documentation. If you've come here to learn more about Alda and how to use it to write amazing musical scores, READ ON!
+This is the landing page for Alda's official documentation. If you've come here to learn more about Alda and how to use it to write amazing musical scores, READ ON!
 
 ## Useful Links
 
-* [README](../README.md)
+* [The official Alda website](https://alda.io)
+* [Community](https://alda.io/community)
 * [Contributing to Alda](../CONTRIBUTING.md)
-* [CHANGELOG (Version History)](../CHANGELOG.md)
-* [Some background on Alda and a tutorial](http://blog.djy.io/alda-a-manifesto-and-gentle-introduction)
-* [Alda for Clojurists](http://blog.djy.io/alda-for-clojurists)
-* [Community](community.md)
+* [CHANGELOG (release notes)](../CHANGELOG.md)
+* [Dave's 2015 manifesto about text-based music composition](https://blog.djy.io/alda-a-manifesto-and-gentle-introduction)
+* Writing music with Alda blog series:
+  1. [Your first notes](https://blog.djy.io/writing-music-with-alda-1/)
+  2. [Rhythm and meter](https://blog.djy.io/writing-music-with-alda-2/)
+  3. [Flats, sharps, and key signatures](https://blog.djy.io/writing-music-with-alda-3/)
+* [Alda 2 migration guide](alda-2-migration-guide.md)
 
 ## Where to Start
 
-* [Installing Alda](../README.md#installation)
+* [Installing Alda](https://alda.io/install)
 
-  * [Updating Alda](../README.md#updating-alda)
+* [Installing a good soundfont](installing-a-good-soundfont.md)
 
-  * [MIDI soundfonts](../README.md#midi-soundfonts)
+* [Editor plugins](editor-plugins.md)
 
-  * [Editor plugins](../README.md#editor-plugins)
-
-* Learn about the [etymology](etymology.md) behind the name Alda.
+* [The Alda tutorial](https://alda.io/tutorial)
 
 * The article on [scores and parts](scores-and-parts.md) provides some good general information on what an Alda score is. After that, you may be interested in learning more about the fundamental pieces of an Alda score:
   * [notes](notes.md)
@@ -31,6 +33,9 @@ Hello! I'm an introductory paragraph, and this is the landing page for Alda's of
   * [markers](markers.md)
   * [offset](offset.md)
   * [attributes](attributes.md)
+  * [repeats](repeats.md)
+  * [variables](variables.md)
+  * [cram expressions](cram-expressions.md)
 
 * Peruse this list of [available instruments](list-of-instruments.md).
 

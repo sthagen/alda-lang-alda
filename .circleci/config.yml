@@ -1,0 +1,323 @@
+version: 2.1
+
+orbs:
+  win: circleci/windows@2.2.0
+
+# All of the jobs below have filters that appear superfluous, but the filters
+# are actually required because if one job has tag filters, then every job
+# upstream (i.e.  directly or transitively required by said job) is required to
+# have filters.
+#
+# See: https://circleci.com/docs/2.0/workflows/#using-contexts-and-filtering-in-your-workflows
+
+workflows:
+  version: 2
+  build_test_and_release:
+    jobs:
+      - build_client:
+          filters:
+            tags:
+              only: /^release-.*/
+      - build_player:
+          filters:
+            tags:
+              only: /^release-.*/
+      - test_ubuntu_18_04:
+          requires:
+            - build_client
+            - build_player
+          filters:
+            tags:
+              only: /^release-.*/
+      - test_macos:
+          requires:
+            - build_client
+            - build_player
+          filters:
+            tags:
+              only: /^release-.*/
+      - test_windows:
+          requires:
+            - build_client
+            - build_player
+          filters:
+            tags:
+              only: /^release-.*/
+      # Stores artifacts in CircleCI. Artifacts are only accessible for 30 days,
+      # so we have a separate job, `upload_artifacts`, that also uploads them to
+      # a more permanent location in the case of tagged releases.
+      - store_artifacts:
+          filters:
+            tags:
+              only: /^release-.*/
+          requires:
+            - test_ubuntu_18_04
+            - test_macos
+            - test_windows
+      # When a tag is pushed, this job uploads the artifacts to a permanent
+      # storage location where end users can download them.
+      - upload_artifacts:
+          filters:
+            tags:
+              only: /^release-.*/
+            branches:
+              ignore: /.*/
+          requires:
+            - test_ubuntu_18_04
+            - test_macos
+            - test_windows
+      # Announces releases on Slack.
+      - announce_release:
+          filters:
+            tags:
+              only: /^release-.*/
+            branches:
+              ignore: /.*/
+          requires:
+            - upload_artifacts
+
+jobs:
+  build_client:
+    docker:
+      - image: circleci/golang:1.15.3
+
+    steps:
+      - checkout
+
+      - restore_cache:
+          key: go-mod-v1-{{ checksum "client/go.sum" }}
+
+      - run:
+          name: Build Alda client executable
+          command: client/bin/build
+
+      - save_cache:
+          key: go-mod-v1-{{ checksum "client/go.sum" }}
+          paths:
+            - "/go/pkg/mod"
+
+      - run:
+          name: Move build to output directory
+          working_directory: client/target
+          command: |
+            mkdir build
+            cp -R $(../../bin/current-content-sha client) build/client
+
+      - persist_to_workspace:
+          root: client/target
+          paths:
+            - build
+
+  build_player:
+    docker:
+      - image: daveyarwood/alda-player:latest
+
+    steps:
+      - checkout
+
+      # Download and cache dependencies
+      - restore_cache:
+          keys:
+            - v1-dependencies-{{ checksum "player/build.gradle.kts" }}
+            # fallback to using the latest cache if no exact match is found
+            - v1-dependencies-
+
+      - run:
+          name: Build Alda player executable
+          command: player/bin/build
+
+      - save_cache:
+          paths:
+            - ~/.gradle
+          key: v1-dependencies-{{ checksum "player/build.gradle.kts" }}
+
+      - run:
+          name: Move build to output directory
+          working_directory: player/target
+          command: |
+            mkdir -p build
+            cp -R $(../../bin/current-content-sha player) build/player
+
+      - persist_to_workspace:
+          root: player/target
+          paths:
+            - build
+
+  test_ubuntu_18_04:
+    docker:
+      - image: circleci/openjdk:8
+
+    steps:
+      - attach_workspace:
+          at: /tmp/workspace
+
+      - run:
+          name: Install alda and alda-player
+          working_directory: /tmp/workspace/build
+          command: |
+            mkdir -p /home/circleci/bin
+            cp client/linux-amd64/alda /home/circleci/bin/
+            cp player/non-windows/alda-player /home/circleci/bin/
+            chmod +x /home/circleci/bin/alda
+            chmod +x /home/circleci/bin/alda-player
+            export ALDA_DISABLE_SPAWNING=yes
+            export ALDA_DISABLE_TELEMETRY=yes
+            alda version
+            alda-player info
+
+      - run:
+          name: alda doctor
+          command: |
+            export ALDA_DISABLE_SPAWNING=yes
+            export ALDA_DISABLE_TELEMETRY=yes
+            alda -v3 doctor --no-audio
+
+      - run:
+          name: "Troubleshooting: player logs"
+          command: cat /home/circleci/.cache/alda/logs/alda-player.log
+          when: on_fail
+
+      - run:
+          name: "Test `alda update` mechanism"
+          command: |
+            export ALDA_DISABLE_SPAWNING=yes
+            export ALDA_DISABLE_TELEMETRY=yes
+            alda -v3 update --yes --version 2.0.0
+            alda version | grep 2.0.0
+            alda-player info | grep 2.0.0
+
+  test_macos:
+    macos:
+      xcode: 11.3.0
+
+    steps:
+      - attach_workspace:
+          at: /tmp/workspace
+
+      - run:
+          name: Install alda and alda-player
+          working_directory: /tmp/workspace/build
+          command: |
+            mkdir -p /usr/local/bin
+            cp client/darwin-amd64/alda /usr/local/bin/
+            cp player/non-windows/alda-player /usr/local/bin/
+            chmod +x /usr/local/bin/alda
+            chmod +x /usr/local/bin/alda-player
+            export ALDA_DISABLE_SPAWNING=yes
+            export ALDA_DISABLE_TELEMETRY=yes
+            alda version
+            alda-player info
+
+      - run:
+          name: alda doctor
+          command: |
+            export ALDA_DISABLE_SPAWNING=yes
+            export ALDA_DISABLE_TELEMETRY=yes
+            alda -v3 doctor --no-audio
+
+      - run:
+          name: "Troubleshooting: player logs"
+          command: cat /Users/distiller/Library/Caches/alda/logs/alda-player.log
+          when: on_fail
+
+      - run:
+          name: "Test `alda update` mechanism"
+          command: |
+            export ALDA_DISABLE_SPAWNING=yes
+            export ALDA_DISABLE_TELEMETRY=yes
+            alda -v3 update --yes --version 2.0.0
+            alda version | grep 2.0.0
+            alda-player info | grep 2.0.0
+
+  test_windows:
+    executor: win/default
+
+    steps:
+      - attach_workspace:
+          at: C:\Users\circleci\alda
+
+      - run:
+          name: Install alda and alda-player
+          working_directory: C:\Users\circleci\alda\build
+          command: |
+            New-Item -ItemType "directory" -Path "C:\Program Files\Alda\bin"
+            Copy-Item -Path "client\windows-amd64\alda.exe" -Destination "C:\Program Files\Alda\bin"
+            Copy-Item -Path "player\windows\alda-player.exe" -Destination "C:\Program Files\Alda\bin"
+            $env:PATH = "$env:PATH;C:\Program Files\Alda\bin"
+            $env:ALDA_DISABLE_SPAWNING = "yes"
+            $env:ALDA_DISABLE_TELEMETRY = "yes"
+            alda version
+            alda-player info
+
+      - run:
+          name: alda doctor
+          command: |
+            $env:PATH = "$env:PATH;C:\Program Files\Alda\bin"
+            $env:ALDA_DISABLE_SPAWNING = "yes"
+            $env:ALDA_DISABLE_TELEMETRY = "yes"
+            alda -v3 doctor --no-audio
+
+      - run:
+          name: "Test `alda update` mechanism"
+          command: |
+            $env:PATH = "$env:PATH;C:\Program Files\Alda\bin"
+            $env:ALDA_DISABLE_SPAWNING = "yes"
+            $env:ALDA_DISABLE_TELEMETRY = "yes"
+            alda -v3 update --yes --version 2.0.0
+            if (alda version | Select-String -Pattern 2.0.0 -quiet) { true } else { false }
+            if (alda-player info | Select-String -Pattern 2.0.0 -quiet) { true } else { false }
+
+      - run:
+          name: "Troubleshooting: player logs"
+          command: type C:\Users\circleci\AppData\Local\alda\cache\logs\alda-player.log
+          when: on_fail
+
+  store_artifacts:
+    docker:
+      - image: circleci/buildpack-deps:bionic
+
+    steps:
+      - attach_workspace:
+          at: /tmp/workspace
+
+      - store_artifacts:
+          path: /tmp/workspace/build/client
+          destination: client
+
+      - store_artifacts:
+          path: /tmp/workspace/build/player
+          destination: player
+
+  upload_artifacts:
+    docker:
+      - image: daveyarwood/alda-artifact-uploader:latest
+
+    steps:
+      - attach_workspace:
+          at: /tmp/workspace
+
+      - checkout
+
+      - run:
+          name: "Configure AWS CLI for use with DigitalOcean Spaces"
+          command: |
+            aws configure set aws_access_key_id $DO_ACCESS_KEY_ID
+            aws configure set aws_secret_access_key $DO_SECRET_ACCESS_KEY
+
+      - run:
+          name: "Upload release artifacts"
+          command: |
+            bin/upload-release ${CIRCLE_TAG#release-} /tmp/workspace/build
+
+  announce_release:
+    docker:
+      - image: daveyarwood/alda-release-announcer:latest
+
+    steps:
+      - checkout
+
+      - run:
+          name: "Announce release on Slack"
+          command: |
+            bin/announce-release ${CIRCLE_TAG#release-}
+

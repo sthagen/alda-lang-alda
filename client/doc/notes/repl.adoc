@@ -1,0 +1,129 @@
+= Alda v2 REPL
+
+The REPL experience will be a little bit different in Alda v2 compared to Alda
+v1. See the link:interaction-modes.adoc[interaction modes] doc for more details.
+
+== Basic usage
+
+Basic usage of the REPL will be about the same from the user's perspective.
+Running `alda repl` will open an interactive prompt where you can enter lines of
+Alda source code in an iterative fashion and hear the new notes. Each successive
+line of input is interpreted in the context of all of the lines entered so far.
+
+Under the hood, however, this will work differently from Alda v1.
+
+=== Implementation
+
+==== Alda v1
+
+In Alda v1, this worked by essentially sending over the entire score all over
+again with every line of input entered. The score up to that point was included
+as _history_, and the new code sent separately in the same request. The Alda v1
+CLI also lets you do this the same way: `alda play --history "..." --code
+"..."`. I chose to do it this way in order to accommodate the architectural
+choice to have workers be somewhat long-lived processes that can handle multiple
+scores during their lifetimes. That was already complicated enough, so I think
+in order to avoid complicating things further, I chose not to have worker
+processes keep track of the state of each score. After playing a score, a worker
+would forget about it entirely. It was then the client's responsibility to keep
+track of the state ("history") of a score and include it with every subsequent
+request.
+
+==== Alda v2
+
+In Alda v2, the client has a lot more context about a score because the client
+is doing most of the work now instead of a background process. The client is
+responsible for parsing and evaluating a score. The client, then, easily has the
+ability to keep track of the _state_ of the score because it's already an object
+in memory.
+
+The Alda REPL tracks its state in a `*Score` instance. Each line of input is
+parsed into a list of events. The events are then applied to the in-memory score
+object.
+
+I think we can keep track of which output events (e.g. notes) are new by just
+keeping track of the number of events before vs. after, and indexing into the
+list. Then, we can transmit OSC messages to the player for just the new notes.
+
+The REPL `:new` command can simply replace the `*Score` instance with a new one.
+
+The REPL `:load` command can parse an existing score and use the resulting
+`*Score` object.
+
+We will also keep track of the history of successfully-parsed lines of input so
+that when the user uses the `:save` command, it will save the lines of input
+into a file.
+
+== Player management
+
+For the most part, whenever an `alda` command is run (`alda --help`, `alda
+play ...`, etc.), the client checks in the background that there are enough
+player processes available so that subsequent `alda play` commands can result in
+immediate playback. The client spawns more player processes as needed.
+
+`alda repl` is a little different in that it's a long-running process, so it's
+likely that the user won't be running `alda` commands as often because they'll
+be interacting with the REPL (a single, long-running process) instead. I think
+it would probably make sense to have a background routine that checks about once
+per minute that there enough player processes available and fill the pool of
+available players as needed.
+
+This should almost always be a no-op because the REPL workflow is one where the
+same player process is used repeatedly. But if the user runs the `:new` REPL
+command, that should both reset the score object to a new `*Score` instance and
+also shut down the player process it was using and obtain a new one. At that
+point, a new player process will need to be spawned, so this background routine
+would take care of that the next time it comes around.
+
+=== Challenges
+
+==== What if the player process dies during live-coding?
+
+Ignoring the live-coding use case, we can already recover well from the scenario
+where the REPL server is using a player process and the player process suddenly
+dies for some reason. The server is able to realize when it can't talk to the
+player process anymore and it will quickly replace the player process with a new
+one.
+
+At the moment, we don't need to do anything special to prepare a new player
+process; the server has all of the context about the score and it can send the
+player everything the player needs to know, right when it's telling the player
+what to play. This is one of the advantages of doing all of the work of parsing,
+evaluating, and tracking score state on the client (well, server, in this case)
+side.
+
+However, When we're ready to support live coding, the state of the player
+process will become more important. We will be sending patterns to the player
+and having the player loop the patterns and update them on demand. At that
+point, it will be more noticeable and problematic if a player unexpectedly dies.
+
+We might need to "bootstrap" the new player process so that we can attempt to
+recover from this disastrous scenario and maybe try to resume playing from where
+we left off?  I don't think there would be any way of knowing definitively, from
+the server side, what offset the player had gotten to when it died, but it
+should at least be possible for us to know, from the state of the score, the
+current definition of each pattern, which pattern(s) are looping, and for how
+long they are supposed to loop. Then we can send the player process any messages
+it would take to get the player process into the desired state to resume looping
+the pattern that it was probably looping, etc. and then include a final
+`/system/play` message that will tell the new player to start playing from that
+point.
+
+...of course, there's another problem here, which is that I don't think we can
+assume that the player process was at the end of the score and looping a
+pattern, if the player died. For all we know, it only got to play a couple notes
+of a long score and then it died, and the user might prefer to have the score
+play again from the beginning. Or the user might prefer not to start playing at
+all.
+
+Maybe the best thing to do in this scenario is just to print a warning when the
+player becomes unreachable and give the user some tools to deal with that
+scenario. The `:play` command is actually a pretty good tool already, in that
+the live-coding user can place markers every so often and if the player dies,
+they can resume from the marker by running `:play from some-marker`. Or they can
+run `:play` without arguments if they want to play the entire score again from
+the beginning.
+
+== Alda REPL server API
+
+Moved to link:../../../doc/alda-repl-server-api.adoc[alda-repl-server-api.adoc].

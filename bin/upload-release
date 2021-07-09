@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+
+set -e
+
+function print_usage() {
+  cat <<EOF
+$(basename "$0") VERSION ARTIFACTS_DIR
+
+This script uploads the artifacts and changelog entry for a release to a
+permanent storage location where end users can download them.
+
+Requires the \`aws\` CLI to be installed and configured to be able to use
+DigitalOcean. Also requires access to the Alda releases DigitalOcean Space,
+obviously.
+EOF
+}
+
+release_version="$1"
+artifacts_dir="$2"
+
+if [[ -z "$release_version" ]] || [[ -z "$artifacts_dir" ]]; then
+  print_usage
+  exit 1
+fi
+
+if ! command -v aws > /dev/null; then
+  echo "This script requires the \`aws\` CLI."
+  exit 1
+fi
+
+spaces_endpoint="https://nyc3.digitaloceanspaces.com"
+
+function spaces_s3() {
+  aws "--endpoint=$spaces_endpoint" s3 "$@"
+}
+
+releases_bucket="s3://alda-releases"
+
+release_s3_url="$releases_bucket/$release_version"
+
+# Verify that a release with this version number wasn't already uploaded.
+if spaces_s3 ls "$release_s3_url" > /dev/null; then
+  echo "Release already uploaded: $release_s3_url"
+  exit 1
+fi
+
+echo "Generating version changelog..."
+version_changelog="$(mktemp)"
+"$(dirname "$0")/version-changelog" "$release_version" > "$version_changelog"
+
+echo "Uploading $artifacts_dir to $release_s3_url..."
+
+# First, upload all of the (non-Windows) `alda` and `alda-player` executables,
+# ensuring that they have the MIME type application/octet-stream. I noticed that
+# if we don't specify the content type, they end up having the content type
+# binary/octet-stream, which Firefox seems to think is a DEB file, for some
+# reason.
+spaces_s3 sync \
+  --acl public-read \
+  --exclude '*' \
+  --include '*/alda' \
+  --include '*/alda-player' \
+  --content-type application/octet-stream \
+  "$artifacts_dir" \
+  "$release_s3_url"
+
+# Now, upload everything else, trusting that S3 is smart enough to infer the
+# correct content type.
+spaces_s3 sync \
+  --acl public-read \
+  --exclude '*/alda' \
+  --exclude '*/alda-player' \
+  "$artifacts_dir" \
+  "$release_s3_url"
+
+# Add CHANGELOG.md
+spaces_s3 cp \
+  --acl public-read \
+  "$version_changelog" \
+  "$release_s3_url/CHANGELOG.md"
+
+# Add date.txt
+date '+%Y-%m-%d' \
+  | spaces_s3 cp \
+      --acl public-read \
+      - \
+      "$release_s3_url/date.txt"

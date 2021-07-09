@@ -25,11 +25,8 @@
   </p>
 </p>
 
-> New to Alda? You may be interested in reading [this blog post][alda-blog-post] as an introduction.
-
-
 Alda is a text-based programming language for music composition. It allows you
-to write and play back music using only a text editor and the command line.
+to compose and play back music using only your text editor and the command line.
 
 ```alda
 piano:
@@ -39,9 +36,13 @@ piano:
   << g1/>g/>g/b/>d/g
 ```
 
-> For more examples, see these [example scores](https://github.com/alda-lang/alda-core/tree/master/examples).
+> For more examples, see these [example scores](./examples/).
 
 The language's design equally favors aesthetics, flexibility and ease of use.
+
+(Why compose music this way instead of in a graphical sheet music notation
+program? See [this blog post][alda-blog-post] for a brief history and
+rationale.)
 
 [alda-blog-post]: https://blog.djy.io/alda-a-manifesto-and-gentle-introduction/
 
@@ -61,7 +62,7 @@ The language's design equally favors aesthetics, flexibility and ease of use.
 
 [gm-sound-set]: http://www.midi.org/techspecs/gm1sound.php
 
-### TODO
+### Planned
 
 > If you'd like to help, come on in -- [the water's fine](#contributing)!
 
@@ -72,101 +73,16 @@ The language's design equally favors aesthetics, flexibility and ease of use.
 
 ## Installation
 
-> You must have [Java](https://www.java.com/en/download) 8+ installed on your system in order to run Alda.
->
-> (Chances are, you already have a recent enough version of Java installed.)
+See [the official website][alda-install] for instructions to install the latest
+release of Alda.
 
-### Mac OS X / Linux
-
-* Go to the [latest release](https://github.com/alda-lang/alda/releases/latest) page and download `alda`.
-
-* Make the file executable:
-
-        chmod +x alda
-
-* Make `alda` available on your `$PATH`:
-
-  > Using `/usr/local/bin` here as an example;
-  > you can use any directory on your `$PATH`.
-
-      mv alda /usr/local/bin
-
-### Windows
-
-* Go to the [latest release](https://github.com/alda-lang/alda/releases/latest) page and download `alda.exe`.
-
-* Make the file executable:
-  * Go to your downloads folder, right click `alda.exe` to open up its file properties, and click `unblock`
-
-* Copy `alda.exe` to a location that makes sense for you. If you follow standard Windows conventions, this means creating a folder called `Alda` in your `Program Files (x86)` folder, and then moving the `alda.exe` file into it.
-
-* Make `alda` available on your `PATH`:
-  *  Go to the Windows `System` Control Panel option, select `Advanced System Settings` and then click on `Environment Variables`, then edit the `PATH` variable (either specifically for your user account or for the system in general) and add `;C:\Program Files (x86)\Alda` to the end. Save this edit. Note that if you placed `alda.exe` in a different folder, you will need to use that folder's full path name in your edit, instead.
-
-You will now be able to run Alda from anywhere in the command prompt by typing `alda`, but note that command prompts that were already open will need to be restarted before they will pick up on the new PATH value.
-
-### Nix
-
-`alda` is available on [nixpkgs](https://github.com/NixOS/nixpkgs):
-
-```bash
-nix-shell -p alda
-```
-
-### Updating Alda
-
-Once you have Alda installed, you can update to the latest version at any time by running:
-
-```
-alda update
-```
-
-### MIDI soundfonts
-
-Default JVM soundfonts usually are of low quality. We recommend installing a good freeware soundfont like FluidR3 to make your MIDI instruments sound a lot nicer.
-
-#### Mac OS X / Linux
-
-For your convenience, there is a script in this repo that will install the FluidR3 soundfont for Mac and Linux users.
-
-To install FluidR3 on your Mac or Linux system, clone this repo and run:
-
-    scripts/install-fluidr3
-
-This will download FluidR3 and replace `~/.gervill/soundbank-emg.sf2` (your JVM's default soundfont) with it.
-
-#### Windows
-
-<img src="doc/windows_jre_soundfont.png" alt="Replacing the JVM soundfont on Windows">
-
-To replace the default soundfont on a Windows OS:
-
-1. Locate your Java Runtime (JRE) folder and navigate into the `lib` folder. 
-   * If you have JDK 8 or earlier installed, locate your JDK folder instead and navigate into the `jre\lib` folder. 
-2. Make a new folder named `audio`.
-3. Copy any `.sf2` file into this folder.
-
-A variety of popular freeware soundfonts, including FluidR3, are available for download [here](https://musescore.org/en/handbook/soundfonts#list).
-
-### Editor Plugins
-
-For the best experience when editing Alda score files, install the Alda file-type plugin for your editor of choice.
-
-> Don't see a plugin for your favorite editor? Write your own and open a pull request to add it here! :)
-
-- [Ace](https://ace.c9.io/)
-- [Atom](https://github.com/MadcapJake/language-alda)
-- [Eclipse](https://github.com/VishwaasHegde/Alda-Eclipse-Plugin)
-- [Emacs](https://github.com/jgkamat/alda-mode)
-- [Sublime Text](https://github.com/archimedespi/sublime-alda)
-- [Vim](https://github.com/daveyarwood/vim-alda)
-- [VS Code](https://github.com/abhi18av/Alda-VsCode)
+[alda-install]: https://alda.io/install
 
 ## Demo
 
-First start the Alda server (this may take a minute):
+For an overview of available commands and options:
 
-    alda up
+    alda --help
 
 To play a file containing Alda code:
 
@@ -176,7 +92,7 @@ To play arbitrary code at the command line:
 
     alda play --code "piano: c6 d12 e6 g12~4"
 
-To start an [Alda REPL](doc/alda-repl.md):
+To start an interactive [Alda REPL](doc/alda-repl.md) session:
 
     alda repl
 
@@ -188,11 +104,8 @@ Alda's documentation can be found [here](doc/index.md).
 
 We'd love your help -- Pull Requests welcome!
 
-The Alda project is composed of a number of subprojects, each of which has its
-own GitHub repository within the [alda-lang][gh-org] organization.
-
-For a top-level overview of things we're talking about and working on across all
-of the subprojects, check out the [Alda GitHub Project board][gh-project].
+For a top-level overview of things we're talking about and working on, check out
+the [Alda GitHub Project board][gh-project].
 
 For more details on how you can contribute to Alda, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -203,7 +116,7 @@ For more details on how you can contribute to Alda, see [CONTRIBUTING.md](CONTRI
 [gh-project]: https://github.com/orgs/alda-lang/projects/1
 [gh-sponsor]: https://github.com/sponsors/daveyarwood
 
-## Support, Discussion, Comaraderie
+## Support, Discussion, Camaraderie
 
 **Slack**: Joining the [Alda Slack group](https://slack.alda.io) is quick and
 painless. Come say hi!
@@ -213,6 +126,6 @@ subreddit, where you can discuss all things Alda and share your Alda scores!
 
 ## License
 
-Copyright © 2012-2020 Dave Yarwood et al
+Copyright © 2012-2021 Dave Yarwood et al
 
-Distributed under the Eclipse Public License version 1.0.
+Distributed under the Eclipse Public License version 2.0.

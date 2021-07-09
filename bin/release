@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+
+set -e
+
+if [[ -z "$CIRCLECI_API_TOKEN" ]]; then
+  echo "CIRCLECI_API_TOKEN must be set."
+  exit 1
+fi
+
+version="$(cat "$(dirname "$0")/../VERSION")"
+
+echo "--- Release version: $version ---"
+echo
+
+version_changelog="$("$(dirname "$0")/version-changelog" "$version")"
+
+echo "========================================"
+echo "$version_changelog"
+echo "========================================"
+echo
+read -r -p "Is this changelog correct? [yN] "
+
+if [[ "$REPLY" != "y" ]]; then
+  echo "Aborting."
+  exit 1
+fi
+
+# Pushing a tag whose name starts with "release-" causes CircleCI to do a build
+# and upload the artifacts (via `bin/upload-release`).
+release_tag="release-$version"
+git tag -a "$release_tag" -m "$release_tag"
+git push --tags
+
+# HACK: Wait for a bit for CircleCI to create the build pipeline.
+# TODO: Maybe `watch-circleci-pipeline` should check in a loop whether the
+# pipeline exists.
+sleep 5
+
+"$(dirname "$0")/watch-circleci-pipeline"

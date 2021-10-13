@@ -31,9 +31,4 @@ release_tag="release-$version"
 git tag -a "$release_tag" -m "$release_tag"
 git push --tags
 
-# HACK: Wait for a bit for CircleCI to create the build pipeline.
-# TODO: Maybe `watch-circleci-pipeline` should check in a loop whether the
-# pipeline exists.
-sleep 5
-
-"$(dirname "$0")/watch-circleci-pipeline"
+"$(dirname "$0")/watch-circleci-pipeline" "$release_tag"

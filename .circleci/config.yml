@@ -79,20 +79,20 @@ workflows:
 jobs:
   build_client:
     docker:
-      - image: circleci/golang:1.15.3
+      - image: cimg/go:1.16.8
 
     steps:
       - checkout
 
       - restore_cache:
-          key: go-mod-v1-{{ checksum "client/go.sum" }}
+          key: go-mod-v1.16.8-{{ checksum "client/go.sum" }}
 
       - run:
           name: Build Alda client executable
           command: client/bin/build
 
       - save_cache:
-          key: go-mod-v1-{{ checksum "client/go.sum" }}
+          key: go-mod-v1.16.8-{{ checksum "client/go.sum" }}
           paths:
             - "/go/pkg/mod"
 
@@ -145,7 +145,7 @@ jobs:
 
   test_ubuntu_18_04:
     docker:
-      - image: circleci/openjdk:8
+      - image: cimg/openjdk:8.0
 
     steps:
       - attach_workspace:
@@ -274,7 +274,7 @@ jobs:
 
   store_artifacts:
     docker:
-      - image: circleci/buildpack-deps:bionic
+      - image: cimg/base:2021.07
 
     steps:
       - attach_workspace:

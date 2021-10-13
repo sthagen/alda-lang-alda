@@ -32,6 +32,11 @@ var stopCmd = &cobra.Command{
 	Use:   "stop",
 	Short: "Stop playback",
 	RunE: func(_ *cobra.Command, args []string) error {
+		// It's a good idea to print something here to indicate to the user that we
+		// did what they asked. Otherwise, it might not be obvious that we did
+		// anything.
+		fmt.Fprintln(os.Stderr, "Stopping playback.")
+
 		players := []system.PlayerState{}
 
 		// Determine the players to which to send a "stop" message based on the
@@ -61,19 +66,16 @@ var stopCmd = &cobra.Command{
 		for _, player := range players {
 			transmitter := transmitter.OSCTransmitter{Port: player.Port}
 			if err := transmitter.TransmitStopMessage(); err != nil {
-				return err
+				log.Warn().
+					Interface("player", player).
+					Err(err).
+					Msg("Failed to send \"stop\" message to player process.")
+			} else {
+				log.Info().
+					Interface("player", player).
+					Msg("Sent \"stop\" message to player process.")
 			}
-
-			log.Info().
-				Interface("player", player).
-				Msg("Sent \"stop\" message to player process.")
 		}
-
-		// We don't have to print something here, but it's a good idea because it
-		// indicates to the user that we did what they asked. Otherwise, it might
-		// not be obvious that we did anything.
-		fmt.Fprintln(os.Stderr, "Stopping playback.")
-
 		return nil
 	},
 }

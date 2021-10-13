@@ -2,19 +2,123 @@ package system
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"alda.io/client/color"
 	"alda.io/client/generated"
 	"alda.io/client/help"
 	log "alda.io/client/logging"
+	"alda.io/client/util"
+
+	"github.com/daveyarwood/go-osc/osc"
 )
+
+const reasonableTimeout = 20 * time.Second
+
+func DeletePlayerStateFile(playerID string) error {
+	path := CachePath(
+		"state", "players", generated.ClientVersion, playerID+".json",
+	)
+
+	log.Debug().
+		Str("path", path).
+		Msg("Deleting player state file.")
+
+	err := os.Remove(path)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
+}
+
+func cleanUpStaleStateFiles(stateDir string) error {
+	if err := filepath.WalkDir(
+		stateDir,
+		func(path string, info os.DirEntry, err error) error {
+			if errors.Is(err, os.ErrNotExist) {
+				return nil
+			}
+
+			if err != nil {
+				return err
+			}
+
+			if info.IsDir() {
+				return nil
+			}
+
+			fileInfo, err := os.Stat(path)
+			if errors.Is(err, os.ErrNotExist) {
+				return nil
+			} else if err != nil {
+				return err
+			}
+
+			timeSinceModified := time.Since(fileInfo.ModTime())
+
+			if timeSinceModified > time.Minute*2 {
+				log.Debug().
+					Float64("seconds-since-modified", timeSinceModified.Seconds()).
+					Str("path", path).
+					Msg("Deleting stale file.")
+
+				err := os.Remove(path)
+				if err != nil && !errors.Is(err, os.ErrNotExist) {
+					return err
+				}
+				return nil
+			}
+
+			return nil
+		},
+	); err != nil {
+		return err
+	}
+
+	// NOTE: I initially also walked the directory a second time and attempted to
+	// delete empty directories, but I found that it was too easy to run into a
+	// race condition where the directory, so we delete it, but right before we
+	// delete it, a player starts up and puts a file in the directory, and then
+	// the directory gets deleted even though it isn't actually empty at that
+	// point.
+	//
+	// Player processes also delete empty directories for old versions, and it
+	// seems to behave well, so we don't need to include the deletion of empty
+	// directories part here in the client.
+
+	return nil
+}
+
+// Each `alda-player` process creates a state file where it tracks its own
+// state. The `alda` client uses this information to list player processes
+// (`alda ps`) or to find an available player process to play a score.
+//
+// Each player process deletes its own state file when it exits, but this
+// doesn't happen in exceptional scenarios like an out of memory error or the
+// process being forcibly terminated (e.g. `kill -9`).
+//
+// Because it will always be possible for player processes to die before they
+// can clean up their own state files, both `alda-player` and `alda` routinely
+// check for and clean up stale player state files.
+func CleanUpStaleStateFiles() error {
+	for _, stateDir := range []string{
+		CachePath("state", "players"),
+		CachePath("state", "repl-servers"),
+	} {
+		if err := cleanUpStaleStateFiles(stateDir); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
 
 // PlayerState describes the current state of a player process. These states are
 // continously written to files by each player process. (See: StateManager.kt.)
@@ -26,45 +130,100 @@ type PlayerState struct {
 	ReadError error
 }
 
+// REPLServerState describes the current state of an Alda REPL server process.
+// These states are continously written to files by each Alda REPL process.
+// (See: repl/server.go.)
+type REPLServerState struct {
+	Port      int    `json:"port"`
+	ID        string `json:"id"`
+	ReadError error  `json:"-"`
+}
+
+func processFiles(
+	directory string,
+	process func(filename string, contents []byte, readError error),
+) error {
+	if err := os.MkdirAll(directory, os.ModePerm); err != nil {
+		return err
+	}
+
+	files, err := os.ReadDir(directory)
+	if err != nil {
+		return err
+	}
+
+	for _, file := range files {
+		filename := file.Name()
+		filepath := filepath.Join(directory, filename)
+		contents, readError := os.ReadFile(filepath)
+		process(filename, contents, readError)
+	}
+
+	return nil
+}
+
 // ReadPlayerStates reads all of the player state files in the Alda cache
 // directory and returns a list of player state structs describing the current
 // state of each player process.
 //
 // Returns an error if something goes wrong.
 func ReadPlayerStates() ([]PlayerState, error) {
-	playersDir := CachePath("state", "players", generated.ClientVersion)
-	if err := os.MkdirAll(playersDir, os.ModePerm); err != nil {
-		return nil, err
-	}
-
-	files, err := ioutil.ReadDir(playersDir)
-	if err != nil {
-		return nil, err
+	if err := CleanUpStaleStateFiles(); err != nil {
+		log.Warn().Err(err).Msg("Failed to clean up stale state files.")
 	}
 
 	states := []PlayerState{}
 
-	for _, file := range files {
-		filepath := filepath.Join(playersDir, file.Name())
+	if err := processFiles(
+		CachePath("state", "players", generated.ClientVersion),
+		func(filename string, contents []byte, readError error) {
+			var state PlayerState
 
-		var readError error
-		var state PlayerState
-
-		contents, err := ioutil.ReadFile(filepath)
-		if err != nil {
-			readError = err
-		} else {
-			err := json.Unmarshal(contents, &state)
-			if err != nil {
-				readError = err
+			if readError == nil {
+				err := json.Unmarshal(contents, &state)
+				if err != nil {
+					readError = err
+				}
 			}
-		}
 
-		state.ID = strings.Replace(file.Name(), ".json", "", 1)
-		state.ReadError = readError
+			state.ID = strings.Replace(filename, ".json", "", 1)
+			state.ReadError = readError
 
-		states = append(states, state)
+			states = append(states, state)
+		},
+	); err != nil {
+		return nil, err
 	}
+
+	return states, nil
+}
+
+// ReadREPLServerStates reads all of the REPL server state files in the Alda
+// cache directory and returns a list of REPLServerState structs describing the
+// current state of each player process.
+//
+// Returns an error if something goes wrong.
+func ReadREPLServerStates() ([]REPLServerState, error) {
+	states := []REPLServerState{}
+
+	processFiles(
+		CachePath("state", "repl-servers"),
+		func(filename string, contents []byte, readError error) {
+			var state REPLServerState
+
+			if readError == nil {
+				err := json.Unmarshal(contents, &state)
+				if err != nil {
+					readError = err
+				}
+			}
+
+			state.ID = strings.Replace(filename, ".json", "", 1)
+			state.ReadError = readError
+
+			states = append(states, state)
+		},
+	)
 
 	return states, nil
 }
@@ -122,8 +281,45 @@ To troubleshoot:
 	)
 }
 
-// FindAvailablePlayer finds a player that is in an available state and returns
-// current information about its state.
+// PingPlayer sends a ping message to the specified port number, where a player
+// process is expected to be listening.
+//
+// If the first ping doesn't go through, it is tried repeatedly for the
+// `reasonableTimeout` duration, so as to avoid concluding too hastily that a
+// player process is not reachable (e.g. it might be in the process of coming up
+// and will be available shortly).
+//
+// If the player is reachable, the OSC client that we created in order to ping
+// the player process is returned, so that it can be reused if desired.
+//
+// Returns an error if the player isn't reachable after the timeout duration.
+func PingPlayer(port int) (*osc.Client, error) {
+	log.Debug().
+		Int("port", port).
+		Msg("Waiting for player to respond to ping.")
+
+	client := osc.NewClient("localhost", port, osc.ClientProtocol(osc.TCP))
+
+	err := util.Await(
+		func() error {
+			return client.Send(osc.NewMessage("/ping"))
+		},
+		reasonableTimeout,
+	)
+
+	return client, err
+}
+
+// FindAvailablePlayer finds a player that is in an available state, confirms
+// that it can be reached by sending a ping, and returns current information
+// about the player's state.
+//
+// In the case where a player appears to exist in the available state, but is
+// not reachable (e.g. if the player suddenly died and wasn't able to clean up
+// its own state file), FindAvailablePlayer will delete that player's state file
+// and try again with other players that appear to be in the available state,
+// and will also fill the player pool to help ensure that we don't run out of
+// players.
 //
 // Returns `ErrNoPlayersAvailable` if no player is currently in an available
 // state.
@@ -134,9 +330,28 @@ func FindAvailablePlayer() (PlayerState, error) {
 	}
 
 	for _, player := range players {
-		if player.State == "ready" {
-			return player, nil
+		if player.State != "ready" {
+			continue
 		}
+
+		if _, err := PingPlayer(player.Port); err != nil {
+			log.Warn().
+				Interface("player", player).
+				Err(err).
+				Msg("Failed to reach player process. Will try another one.")
+
+			if err := DeletePlayerStateFile(player.ID); err != nil {
+				return PlayerState{}, err
+			}
+
+			if err := FillPlayerPool(); err != nil {
+				return PlayerState{}, err
+			}
+
+			return FindAvailablePlayer()
+		}
+
+		return player, nil
 	}
 
 	return PlayerState{}, ErrNoPlayersAvailable

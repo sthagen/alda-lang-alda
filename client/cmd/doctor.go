@@ -15,6 +15,7 @@ import (
 
 	"alda.io/client/color"
 	"alda.io/client/help"
+	log "alda.io/client/logging"
 	"alda.io/client/model"
 	"alda.io/client/parser"
 	"alda.io/client/repl"
@@ -38,19 +39,6 @@ func step(action string, test func() error) error {
 
 	fmt.Printf("%s %s\n", color.Aurora.Green("OK "), action)
 	return nil
-}
-
-func ping(port int) (*osc.Client, error) {
-	client := osc.NewClient("localhost", port, osc.ClientProtocol(osc.TCP))
-
-	err := util.Await(
-		func() error {
-			return client.Send(osc.NewMessage("/ping"))
-		},
-		reasonableTimeout,
-	)
-
-	return client, err
 }
 
 func sendShutdownMessage(client *osc.Client) error {
@@ -115,6 +103,42 @@ var doctorCmd = &cobra.Command{
 			"Generate score model",
 			func() error {
 				return score.Update(scoreUpdates...)
+			},
+		); err != nil {
+			return err
+		}
+
+		//////////////////////////////////////////////////
+
+		if err := step(
+			"Ensure that there are no stale player processes",
+			func() error {
+				players, err := system.ReadPlayerStates()
+				if err != nil {
+					return err
+				}
+
+				for _, player := range players {
+					// Disregard player processes that are starting up as a result of
+					// running `alda doctor`. We're really looking for older player
+					// processes that died mysteriously.
+					if player.State == "starting" {
+						continue
+					}
+
+					if _, err := system.PingPlayer(player.Port); err != nil {
+						log.Warn().
+							Interface("player", player).
+							Err(err).
+							Msg("Failed to reach player process. Deleting state file.")
+
+						if err := system.DeletePlayerStateFile(player.ID); err != nil {
+							return err
+						}
+					}
+				}
+
+				return nil
 			},
 		); err != nil {
 			return err
@@ -310,7 +334,7 @@ version of %s.`,
 		if err := step(
 			"Ping player process",
 			func() error {
-				pingClient, err := ping(playerPort)
+				pingClient, err := system.PingPlayer(playerPort)
 				if err != nil {
 					return err
 				}
@@ -572,7 +596,7 @@ version of %s.`,
 		if err := step(
 			"Ping the player",
 			func() error {
-				pingClient, err := ping(player.Port)
+				pingClient, err := system.PingPlayer(player.Port)
 				if err != nil {
 					return err
 				}
@@ -590,7 +614,27 @@ version of %s.`,
 		if err := step(
 			"Shut the player down",
 			func() error {
-				return sendShutdownMessage(client)
+				if err := sendShutdownMessage(client); err != nil {
+					return err
+				}
+
+				return util.Await(
+					func() error {
+						players, err := system.ReadPlayerStates()
+						if err != nil {
+							return err
+						}
+
+						for _, p := range players {
+							if p.Port == player.Port {
+								return fmt.Errorf("player state file still exists")
+							}
+						}
+
+						return nil
+					},
+					reasonableTimeout,
+				)
 			},
 		); err != nil {
 			return err
@@ -635,6 +679,33 @@ version of %s.`,
 		//////////////////////////////////////////////////
 
 		if err := step(
+			"Find the REPL server",
+			func() error {
+				return util.Await(
+					func() error {
+						servers, err := system.ReadREPLServerStates()
+						if err != nil {
+							return err
+						}
+
+						for _, s := range servers {
+							if s.Port == replServer.Port {
+								return nil
+							}
+						}
+
+						return fmt.Errorf("REPL server state file not found")
+					},
+					reasonableTimeout,
+				)
+			},
+		); err != nil {
+			return err
+		}
+
+		//////////////////////////////////////////////////
+
+		if err := step(
 			"Interact with the REPL server",
 			func() error {
 				client, err := repl.NewClient("localhost", replServer.Port)
@@ -648,6 +719,35 @@ version of %s.`,
 				// communication between an Alda REPL server and client.
 				_, err = client.StartSession()
 				return err
+			},
+		); err != nil {
+			return err
+		}
+
+		//////////////////////////////////////////////////
+
+		if err := step(
+			"Shut down the REPL server",
+			func() error {
+				replServer.Close()
+
+				return util.Await(
+					func() error {
+						servers, err := system.ReadREPLServerStates()
+						if err != nil {
+							return err
+						}
+
+						for _, s := range servers {
+							if s.Port == replServer.Port {
+								return fmt.Errorf("REPL server state file still exists")
+							}
+						}
+
+						return nil
+					},
+					reasonableTimeout,
+				)
 			},
 		); err != nil {
 			return err

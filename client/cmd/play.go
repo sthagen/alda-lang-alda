@@ -299,36 +299,24 @@ var playCmd = &cobra.Command{
 			}
 		}
 
-		transmitOpts := []transmitter.TransmissionOption{
-			transmitter.TransmitFrom(optionFrom),
-			transmitter.TransmitTo(optionTo),
-		}
-
-		if action == "play" {
-			transmitOpts = append(transmitOpts, transmitter.OneOff())
-		}
-
 		log.Info().
 			Interface("players", players).
 			Str("action", action).
 			Msg("Sending messages to players.")
 
 		for _, player := range players {
-			log.Debug().
-				Interface("player", player).
-				Msg("Waiting for player to respond to ping.")
-
-			if _, err := ping(player.Port); err != nil {
-				return err
-			}
-
-			transmitter := transmitter.OSCTransmitter{Port: player.Port}
+			xmitter := transmitter.OSCTransmitter{Port: player.Port}
 
 			var transmissionError error
 			if action == "unpause" {
-				transmissionError = transmitter.TransmitPlayMessage()
+				transmissionError = xmitter.TransmitPlayMessage()
 			} else {
-				transmissionError = transmitter.TransmitScore(score, transmitOpts...)
+				transmissionError = xmitter.TransmitScore(
+					score,
+					transmitter.TransmitFrom(optionFrom),
+					transmitter.TransmitTo(optionTo),
+					transmitter.OneOff(),
+				)
 			}
 			if transmissionError != nil {
 				return transmissionError

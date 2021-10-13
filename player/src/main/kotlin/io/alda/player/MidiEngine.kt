@@ -26,12 +26,17 @@ const val MIDI_SET_TEMPO    = 0x51
 const val MIDI_END_OF_TRACK = 0x2F
 
 // ref: https://www.midi.org/specifications-old/item/table-3-control-change-messages-data-bytes-2
-const val MIDI_PANNING    = 10
-
+const val MIDI_PANNING       = 10
 // "Expression" is basically volume. We used to use Channel Volume (7) instead,
 // but Expression (11) is more appropriate to use in a MIDI sequence.  ref:
 // https://github.com/alda-lang/alda-core/issues/75
-const val MIDI_EXPRESSION = 11
+const val MIDI_EXPRESSION    = 11
+// TODO: Add support for the ones below:
+const val MIDI_VIBRATO_RATE  = 76
+const val MIDI_VIBRATO_DEPTH = 77
+const val MIDI_VIBRATO_DELAY = 78
+const val MIDI_REVERB        = 91
+const val MIDI_CHORUS        = 93
 
 const val DIVISION_TYPE = Sequence.PPQ
 // This ought to allow for notes as fast as 512th notes at a tempo of 120 bpm,
@@ -262,7 +267,9 @@ class MidiEngine {
 
   fun scheduleShutdown(offsetMs : Int) {
     val now = Math.round(currentOffset()).toInt()
-    scheduleMetaMsg(now + offsetMs, CustomMetaMessage.SHUTDOWN)
+    val shutdownOffsetMs = now + offsetMs
+    log.debug { "Scheduling shutdown for ${shutdownOffsetMs}" }
+    scheduleMetaMsg(shutdownOffsetMs, CustomMetaMessage.SHUTDOWN)
   }
 
   init {
@@ -281,6 +288,7 @@ class MidiEngine {
     sequencer.addMetaEventListener(MetaEventListener { msg ->
       when (val msgType = msg.getType()) {
         CustomMetaMessage.CONTINUE.type -> {
+          log.debug { "Received CONTINUE meta event" }
           synchronized(isPlaying) {
             if (isPlaying) sequencer.start()
           }
@@ -288,11 +296,18 @@ class MidiEngine {
 
         CustomMetaMessage.PERCUSSION.type -> {
           val trackNumber = msg.getData().first().toInt()
+          log.debug {
+            "Received PERCUSSION meta event for track ${trackNumber}"
+          }
           track(trackNumber).useMidiPercussionChannel()
         }
 
         CustomMetaMessage.EVENT.type -> {
           val pendingEvent = String(msg.getData())
+
+          log.debug {
+            "Received EVENT meta event for pending event: ${pendingEvent}"
+          }
 
           synchronized(pendingEvents) {
             pendingEvents.get(pendingEvent)?.also { latch ->
@@ -305,15 +320,18 @@ class MidiEngine {
         }
 
         CustomMetaMessage.SHUTDOWN.type -> {
+          log.debug { "Received SHUTDOWN meta event" }
           isRunning = false
         }
 
         MIDI_END_OF_TRACK -> {
+          log.debug { "Received End of Track meta event" }
           // This metamessage is sent automatically when the end of the sequence
           // is reached.
         }
 
         MIDI_SET_TEMPO -> {
+          log.debug { "Received Set Tempo meta event" }
           // This metamessage is handled by the Sequencer out of the box.
         }
 

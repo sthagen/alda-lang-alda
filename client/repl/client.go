@@ -1,5 +1,3 @@
-// vim: tabstop=2
-
 package repl
 
 import (
@@ -19,6 +17,7 @@ import (
 	"alda.io/client/help"
 	"alda.io/client/json"
 	log "alda.io/client/logging"
+	"alda.io/client/parser"
 	"alda.io/client/system"
 	"alda.io/client/util"
 	"github.com/chzyer/readline"
@@ -381,7 +380,11 @@ arguments will save the updated score to the same file.`,
 
   Print the parsed events output of the score (This is the output that you get
   when you run ` + "`alda parse -o events ...`" + ` at the command line.):
-    :score events`,
+    :score events
+
+  Print the parsed AST output of the score (This is the output that you get
+  when you run ` + "`alda parse -o ast-human ...`" + ` at the command line.):
+    :score ast`,
 			run: func(client *Client, argsString string) error {
 				args, err := shlex.Split(argsString)
 				if err != nil {
@@ -424,6 +427,14 @@ arguments will save the updated score to the same file.`,
 					}
 
 					fmt.Println(scoreEvents.StringIndent("", "  "))
+
+				case "ast":
+					scoreAST, err := client.scoreAST()
+					if err != nil {
+						return err
+					}
+
+					fmt.Println(parser.HumanReadableAST(scoreAST))
 
 				case "info":
 					scoreData, err := client.scoreData()
@@ -819,6 +830,25 @@ func (client *Client) scoreEvents() (*json.Container, error) {
 	}
 
 	return json.ParseJSON([]byte(res["events"].(string)))
+}
+
+func (client *Client) scoreAST() (*json.Container, error) {
+	res, err := client.sendRequest(
+		map[string]interface{}{"op": "score-ast"},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	switch res["ast"].(type) {
+	case string: // OK to proceed
+	default:
+		return nil, fmt.Errorf(
+			"the response from the REPL server did not contain the score AST",
+		)
+	}
+
+	return json.ParseJSON([]byte(res["ast"].(string)))
 }
 
 func printScoreInfo(scoreData *json.Container) error {

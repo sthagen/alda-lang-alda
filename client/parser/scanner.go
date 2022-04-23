@@ -399,11 +399,6 @@ func (s *scanner) parseNoteLength() {
 	s.addToken(NoteLength, noteLength{denominator: number, dots: int32(dots)})
 }
 
-func (s *scanner) parseInteger() {
-	s.consumeDigits()
-	s.addToken(Integer, s.parseIntegerFrom(s.start))
-}
-
 // This assumes that the initial digit (or minus sign, if it's a negative
 // number) was already consumed.
 func (s *scanner) parseNumber() {
@@ -421,15 +416,10 @@ func (s *scanner) parseNumber() {
 	s.addToken(Number, s.parseFloatFrom(s.start))
 }
 
-type repetitionRange struct {
-	first int32
-	last  int32
-}
-
 func (s *scanner) parseRepetitions() error {
 	// NB: This assumes the initial "'" was already consumed.
 
-	ranges := []repetitionRange{}
+	ranges := []model.RepetitionRange{}
 
 	// Parse repetition ranges as long as we continue to encounter them.
 	for {
@@ -441,7 +431,7 @@ func (s *scanner) parseRepetitions() error {
 		startNumber := s.current
 		s.consumeDigits()
 		first := s.parseIntegerFrom(startNumber)
-		er := repetitionRange{first: first}
+		er := model.RepetitionRange{First: first}
 
 		// Either parse the "last" number of the range, or make the first number
 		// the last number as well, indicating a range of one number, e.g. 3-3.
@@ -453,9 +443,9 @@ func (s *scanner) parseRepetitions() error {
 
 			startNumber := s.current
 			s.consumeDigits()
-			er.last = s.parseIntegerFrom(startNumber)
+			er.Last = s.parseIntegerFrom(startNumber)
 		} else {
-			er.last = first
+			er.Last = first
 		}
 
 		ranges = append(ranges, er)

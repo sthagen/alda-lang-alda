@@ -83,7 +83,12 @@ var doctorCmd = &cobra.Command{
 		if err := step(
 			"Parse source code",
 			func() error {
-				su, err := parser.ParseString(testInput)
+				ast, err := parser.ParseString(testInput)
+				if err != nil {
+					return err
+				}
+
+				su, err := ast.Updates()
 				if err != nil {
 					return err
 				}
@@ -436,9 +441,9 @@ version of %s.`,
 								return err
 							}
 
-							switch msg.(type) {
+							switch msg := msg.(type) {
 							case channel.NoteOn:
-								if msg.(channel.NoteOn).Key() == expectedNote {
+								if msg.Key() == expectedNote {
 									continue ExpectedNotesLoop
 								}
 							}

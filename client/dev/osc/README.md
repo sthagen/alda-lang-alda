@@ -5,7 +5,7 @@ example has a short identifier so that you can select it from the command-line.
 
 ## Setup
 
-* Go 1.16 or higher is needed in order to run the demo.
+* Go 1.17 or higher is needed in order to run the demo.
 
 * Start the [player](../../player) on port 27278 (or another port of your
   choosing) and leave it running.
@@ -109,6 +109,6 @@ go run dev/osc/main.go 27278 patchange
 
 ## License
 
-Copyright © 2019-2021 Dave Yarwood, et al
+Copyright © 2019-2022 Dave Yarwood, et al
 
 Distributed under the Eclipse Public License version 2.0.

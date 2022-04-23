@@ -15,7 +15,6 @@ const findPlayerTimeout = 20 * time.Second
 const playerPoolFillInterval = 10 * time.Second
 const pingTimeout = 5 * time.Second
 const pingInterval = 1 * time.Second
-const failedPingThreshold = 3
 
 func findAvailablePlayer() (system.PlayerState, error) {
 	var player system.PlayerState
@@ -137,9 +136,14 @@ func (server *Server) managePlayers() {
 		if server.hasPlayer() {
 			updatedState, err := system.FindPlayerByID(server.player.ID)
 
+			// FIXME: We are brittly depending on the verbiage in the error messages
+			// returned by `system.FindPlayerByID`.
+			//
+			// TODO: Maybe UserFacingErrors could have an optional error code that we
+			// can depend on here?
 			if err == nil {
 				server.player = updatedState
-			} else if strings.HasPrefix(err.Error(), "player not found") {
+			} else if strings.HasPrefix(err.Error(), "No player was found") {
 				// If the state information tells us that the player process no longer
 				// exists, then we forget about that player process and a new one will be
 				// found to replace it shortly.

@@ -1,18 +1,21 @@
 plugins {
-  id("org.jetbrains.kotlin.jvm") version("1.3.60")
+  id("org.jetbrains.kotlin.jvm") version("1.7.21")
   application
+}
+
+java {
+  targetCompatibility = JavaVersion.VERSION_1_8
 }
 
 repositories {
   mavenLocal()
   mavenCentral()
-  jcenter()
 }
 
 dependencies {
   implementation(kotlin("stdlib-jdk8"))
   implementation(kotlin("reflect"))
-  implementation("com.beust:klaxon:5.0.1")
+  implementation("com.beust:klaxon:5.5")
   implementation("com.github.ajalt:clikt:2.4.0")
 
   implementation("com.illposed.osc:javaosc-core:0.8") {
@@ -36,7 +39,7 @@ dependencies {
 }
 
 application {
-  mainClassName = "io.alda.player.MainKt"
+  mainClass.set("io.alda.player.MainKt")
 }
 
 val run by tasks.getting(JavaExec::class) {

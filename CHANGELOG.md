@@ -1,6 +1,8 @@
 # CHANGELOG
 
-## Unreleased
+## 2.3.0 (2024-06-22)
+
+### Improved MIDI channel assignment
 
 > Incidental note: This release includes some **breaking changes** to the Alda
 > OSC API, which is the communication layer between the Alda client and player
@@ -72,6 +74,17 @@ As of this release:
 I hope you enjoy Alda's newfound ability to handle large numbers of instruments
 in a score. I'm pretty excited about it! As always, please let us know if you
 notice any bugs or unexplained behavior!
+
+### Other misc. changes
+
+* Fixed a bug in `alda doctor` where it would hang if there was an error during
+  the "Send and receive OSC messages" step. Now if there's an error during that
+  step, it will print the error message.
+
+* Client/player communication is now done via `127.0.0.1` by default, instead of
+  `localhost`. These are effectively the same thing, but it's possible for
+  `localhost` not to work, depending on your host configuration. `127.0.0.1` is
+  more likely to work.
 
 ## 2.2.7 (2023-09-01)
 

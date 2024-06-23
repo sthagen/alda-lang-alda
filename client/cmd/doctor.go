@@ -181,7 +181,7 @@ var doctorCmd = &cobra.Command{
 				errors := make(chan error)
 
 				server := osc.NewServer(
-					fmt.Sprintf("localhost:%d", playerPort),
+					fmt.Sprintf("127.0.0.1:%d", playerPort),
 					OSCPacketForwarder{channel: packetsReceived},
 					0,
 					osc.ServerProtocol(osc.TCP),
@@ -195,15 +195,17 @@ var doctorCmd = &cobra.Command{
 					}
 				}()
 
-				if err := util.Await(
-					func() error {
-						transmitter := transmitter.OSCTransmitter{Port: playerPort}
-						return transmitter.TransmitScore(score)
-					},
-					reasonableTimeout,
-				); err != nil {
-					errors <- err
-				}
+				go func() {
+					if err := util.Await(
+						func() error {
+							transmitter := transmitter.OSCTransmitter{Port: playerPort}
+							return transmitter.TransmitScore(score)
+						},
+						reasonableTimeout,
+					); err != nil {
+						errors <- err
+					}
+				}()
 
 				select {
 				case <-packetsReceived:
@@ -712,7 +714,7 @@ version of %s.`,
 		if err := step(
 			"Interact with the REPL server",
 			func() error {
-				client, err := repl.NewClient("localhost", replServer.Port)
+				client, err := repl.NewClient("127.0.0.1", replServer.Port)
 				if err != nil {
 					return err
 				}

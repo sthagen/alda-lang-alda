@@ -1374,6 +1374,25 @@ func init() {
 			},
 		},
 	)
+
+	// TODO: Support more advanced part declarations, e.g. multiple instruments
+	// in a group (`trumpet/piano`) and aliases (`trumpet/piano 'trumpiano'`).
+	// This will require a more nuanced API design for the Lisp function
+	// arguments.
+	defn("part",
+		FunctionSignature{
+			ArgumentTypes: []LispForm{LispString{}},
+			Implementation: func(args ...LispForm) (LispForm, error) {
+				partName := args[0].(LispString).Value
+
+				partDecl := PartDeclaration{
+					Names: []string{partName},
+				}
+
+				return LispScoreUpdate{ScoreUpdate: partDecl}, nil
+			},
+		},
+	)
 }
 
 // LispNil is the value nil.

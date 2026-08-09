@@ -622,6 +622,41 @@ func TestNotes(t *testing.T) {
 	)
 }
 
+// Rests advance a part's offset without producing a score event. This test
+// documents that invariant.
+func TestRestAdvancesOffsetWithoutProducingEvent(t *testing.T) {
+	executeScoreUpdateTestCases(
+		t,
+		scoreUpdateTestCase{
+			label: "a rest advances the part's offset without producing an event",
+			updates: []ScoreUpdate{
+				PartDeclaration{Names: []string{"piano"}},
+				Note{Pitch: LetterAndAccidentals{NoteLetter: C}},
+				Rest{Duration: Duration{
+					Components: []DurationComponent{NoteLength{Denominator: 4}},
+				}},
+			},
+			expectations: []scoreUpdateExpectation{
+				// The note at offset 0 is the only event; the trailing rest
+				// produces none.
+				expectNoteOffsets(0),
+				func(score *Score) error {
+					// The c4 (quarter note at tempo 120 = 500ms) followed by the
+					// r4 (500ms) advances the part's offset to 1000.
+					offset := score.Parts[0].CurrentOffset
+					if !equalish(1000, offset) {
+						return fmt.Errorf(
+							"expected part offset 1000 after a note and a rest, got %f",
+							offset,
+						)
+					}
+					return nil
+				},
+			},
+		},
+	)
+}
+
 func TestNoteValidation(t *testing.T) {
 	for _, durationComponent := range []DurationComponent{
 		NoteLength{Denominator: -1},

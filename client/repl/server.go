@@ -583,33 +583,67 @@ func (server *Server) updateScoreWithInput(
 	newEvents := server.score.Events[eventCountBefore:]
 	log.Debug().Int("lenNewEvents", len(newEvents)).Msg("updateScoreWithInput")
 
-	var syncOffset float64
+	// The sync offset for each part is the player's current position on that
+	// part's track, i.e. the offset at which the last previously-transmitted
+	// note ends. Per the OSC contract (see player/doc/alda-osc-api.md), new
+	// events are expressed relative to this position, so that notes scheduled
+	// now line up in time after the notes that have already been scheduled.
+	//
+	// Note that trailing rests don't produce score events (see
+	// model/note.go), so the player's position after a line of input that ends
+	// in a rest is the end of the last *note*, not the end of the rest. By
+	// re-basing new events relative to that position, any gap created by a
+	// trailing rest is preserved in the relative offsets of the new events.
+	//
+	// The offsets are keyed by part ID rather than *model.Part pointers, because
+	// a part's pointer can change when a voice group ends (see
+	// model/voice.go), while its ID is stable. A part and all of its voices
+	// share the same ID, so a single sync offset is computed for all of them.
+	syncOffsets := map[string]float64{}
 
-	if len(newEvents) > 0 {
-		minOffset := math.MaxFloat64
-		for _, event := range newEvents {
-			offset := event.EventOffset()
-			if offset < minOffset {
-				minOffset = offset
+	for _, event := range server.score.Events[:eventCountBefore] {
+		switch event := event.(type) {
+		case model.NoteEvent:
+			end := event.Offset + event.Duration
+			if current, ok := syncOffsets[event.Part.ID]; !ok || end > current {
+				syncOffsets[event.Part.ID] = end
 			}
 		}
-		log.Debug().Float64("minOffset", minOffset).Msg("updateScoreWithInput")
-		// If minOffset is still MaxFloat64, it means there were no events with a valid offset.
-		// In this case, syncOffset should remain 0.
-		if minOffset != math.MaxFloat64 {
-			syncOffset = minOffset
+	}
+
+	// Clamp each part's sync offset to no more than the earliest new event for
+	// that part. This ensures that no event is scheduled at a negative relative
+	// offset. When new music starts behind the player's current position (e.g.
+	// adding notes to a voice that hasn't gotten as far as the rest of the
+	// track), the effect is that the earliest new note plays right away, which
+	// is the desired behavior in that scenario.
+	//
+	// Parts with no previously-transmitted events are intentionally left out of
+	// the map, so that their sync offset is 0 and their events play at their
+	// actual offsets on a fresh track.
+	if len(newEvents) > 0 {
+		for _, event := range newEvents {
+			switch event := event.(type) {
+			case model.NoteEvent:
+				if current, ok := syncOffsets[event.Part.ID]; ok && event.Offset < current {
+					syncOffsets[event.Part.ID] = event.Offset
+				}
+			}
 		}
 	}
-	log.Debug().Float64("syncOffset", syncOffset).Msg("updateScoreWithInput")
+
+	log.Debug().
+		Interface("syncOffsets", syncOffsets).
+		Msg("updateScoreWithInput")
 
 	return []transmitter.TransmissionOption{
 		// Transmit only the new events, i.e. events added as a result of parsing
 		// the provided `input` and applying the resulting updates to the score.
 		transmitter.TransmitFromIndex(eventCountBefore),
-		// The "sync offset" is the earliest offset of all the new events. We
-		// subtract this from all of the new events so that they start playing
-		// right away.
-		transmitter.SyncOffset(syncOffset),
+		// The sync offset for each part is subtracted from all of the new events
+		// for that part so that they start playing relative to the player's
+		// current position on that part's track.
+		transmitter.SyncOffsets(syncOffsets),
 	}, nil
 }
 

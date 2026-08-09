@@ -16,10 +16,12 @@ type TransmissionContext struct {
 	fromIndex int
 	// The index (+ 1) of the last event to transmit. (default: len(events))
 	toIndex int
-	// An optional offset to subtract from all events transmitted.
+	// An optional map of part IDs to offsets that is used for the purpose of
+	// synchronization. For each part present in the map, any event transmitted
+	// for that part will have the indicated offset subtracted from its offset.
 	// The use case for this is REPL usage, where a score is built up
 	// incrementally as the score is being played.
-	syncOffset float64
+	syncOffsets map[string]float64
 	// When true, no further transmissions are expected for this particular score.
 	//
 	// What this means can vary depending on the transmitter. For the OSC
@@ -76,17 +78,18 @@ func TransmitToIndex(i int) TransmissionOption {
 	return func(ctx *TransmissionContext) { ctx.toIndex = i }
 }
 
-// SyncOffset uses the provided offset for the purpose of synchronization.
-// Any event transmitted will have the indicated offset subtracted from its
-// offset. The use case for this is REPL usage, where a score is built up
-// incrementally as the score is being played.
-func SyncOffset(offset float64) TransmissionOption {
+// SyncOffsets uses the provided map of part IDs to offsets for the purpose of
+// synchronization. For each part present in the map, any event transmitted for
+// that part will have the indicated offset subtracted from its offset. The use
+// case for this is REPL usage, where a score is built up incrementally as the
+// score is being played.
+func SyncOffsets(syncOffsets map[string]float64) TransmissionOption {
 	return func(ctx *TransmissionContext) {
 		log.Debug().
-			Float64("syncOffset", offset).
+			Interface("syncOffsets", syncOffsets).
 			Msg("Applying transmission option")
 
-		ctx.syncOffset = offset
+		ctx.syncOffsets = syncOffsets
 	}
 }
 

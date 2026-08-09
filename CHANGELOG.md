@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## 2.4.4 (2026-08-08)
+
+* Fixed [a timing bug in the REPL][issue-421] where a trailing rest at the end
+  of a line of input was effectively stripped, causing the first note of the
+  next line to play too early (e.g. a quarter note early). The sync offsets used
+  when transmitting incremental REPL updates are now calculated from the
+  player's actual position on each part's track (i.e. where the last note sent
+  to the player ends), which preserves gaps created by trailing rests. The
+  offsets are also computed per part, keyed by stable part ID, so that parts at
+  different positions in the score (including voices) are synchronized
+  correctly.
+
+  Thanks to [Samyra312007] for the fix!
+
 ## 2.4.3 (2026-05-12)
 
 * Adjusted the JVM options used by the player process to use 75% less memory.
@@ -501,6 +515,7 @@ the [Alda 2 migration guide][migration-guide]!
 [lenianiva]: https://github.com/lenianiva
 [CodeForBeauty]: https://github.com/CodeForBeauty
 [SomedayToday]: https://github.com/SomedayToday
+[Samyra312007]: https://github.com/Samyra312007
 
 [alda-import-blog-post]: https://blog.djy.io/musicxml-import-and-another-new-alda-features/
 [midi-channel-assignment-discussion]: https://github.com/alda-lang/alda/discussions/447
@@ -512,3 +527,4 @@ the [Alda 2 migration guide][migration-guide]!
 [issue-405]: https://github.com/alda-lang/alda/issues/405
 [issue-415]: https://github.com/alda-lang/alda/issues/415
 [issue-416]: https://github.com/alda-lang/alda/issues/416
+[issue-421]: https://github.com/alda-lang/alda/issues/421

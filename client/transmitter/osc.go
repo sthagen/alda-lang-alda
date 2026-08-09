@@ -272,7 +272,7 @@ func (oe OSCTransmitter) ScoreToOSCBundle(
 	// export use case that we include tempo messages in the MIDI sequence, so
 	// that the MIDI file can include context about the tempo when it's imported
 	// into other tools.
-	if ctx.syncOffset == 0 {
+	if len(ctx.syncOffsets) == 0 {
 		for _, tempoMsg := range tempoMessages(score, startOffset, endOffset) {
 			bundle.Append(tempoMsg)
 		}
@@ -326,13 +326,27 @@ func (oe OSCTransmitter) ScoreToOSCBundle(
 			// offsets are not adjusted.
 			offset := event.Offset - startOffset
 
-			// When a sync offset is provided, we subtract it from all events.
+			// When sync offsets are provided, we subtract the specified offset
+			// for each part from its events. (When syncOffsets isn't provided, or
+			// when the sync offset for a part isn't specified, the result is that
+			// 0 is subtracted from the part's events' offsets, i.e. the offsets
+			// for that part are not adjusted.)
 			//
-			// NB: ctx.from and ctx.syncOffset are not intended to be used together.
+			// NB: ctx.from and ctx.syncOffsets are not intended to be used together.
 			// If they are used together, the behavior is unspecified (we would
 			// probably subtract too much from each offset and the features wouldn't
 			// work the way they're supposed to.)
-			offset -= ctx.syncOffset
+			offset -= ctx.syncOffsets[event.Part.ID]
+
+			// Guard against negative offsets. These shouldn't occur in practice
+			// (the sync offset for a part is chosen to be no greater than the
+			// earliest new event for that part), but the player can't schedule
+			// events at negative offsets, so we clamp to 0 defensively. The effect
+			// is that a note that would otherwise be in the past is played as soon
+			// as possible.
+			if offset < 0 {
+				offset = 0
+			}
 
 			// The OSC API works with offsets that are ints, not floats, so we do the
 			// rounding here and work with the int value from here onward.

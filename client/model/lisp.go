@@ -10,6 +10,11 @@ import (
 	log "alda.io/client/logging"
 )
 
+// ParseAldaCode is set by the parser package at startup. model can't import
+// parser directly without creating an import cycle, so parser plugs its
+// implementation in here instead.
+var ParseAldaCode func(code string) ([]ScoreUpdate, error)
+
 // Alda includes a minimal Lisp implementation as a subset of the language, in
 // order to facilitate adding new features to the language without accumulating
 // syntax.
@@ -1223,6 +1228,28 @@ func init() {
 				}
 
 				return LispDuration{DurationComponent: noteLength}, nil
+			},
+		},
+	)
+
+	defn("alda-code",
+		FunctionSignature{
+			ArgumentTypes: []LispForm{LispString{}},
+			Implementation: func(args ...LispForm) (LispForm, error) {
+				code := args[0].(LispString).Value
+
+				if ParseAldaCode == nil {
+					return nil, fmt.Errorf("alda-code is not available")
+				}
+
+				updates, err := ParseAldaCode(code)
+				if err != nil {
+					return nil, err
+				}
+
+				return LispScoreUpdate{
+					ScoreUpdate: EventSequence{Events: updates},
+				}, nil
 			},
 		},
 	)

@@ -506,6 +506,10 @@ func AldaPlayerPath() (playerPath string, sameVersion bool, err error) {
 // they aren't.
 func spawnPlayer(playerPath string) error {
 	runCmd := exec.Command(playerPath, "run")
+	// Spawn each player in its own process group so that terminal-generated
+	// signals (e.g. Ctrl+C) sent to the client's process group don't kill the
+	// player processes.
+	runCmd.SysProcAttr = sysProcAttr()
 	if err := runCmd.Start(); err != nil {
 		return err
 	}
